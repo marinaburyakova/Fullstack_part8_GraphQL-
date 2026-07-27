@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client'
 import { ALL_AUTHORS, EDIT_BORN } from '../queries'
 
@@ -9,42 +9,33 @@ const Authors = ({ show }) => {
   // 1. Делаем GraphQL-запрос на получение авторов
   const { loading, error, data } = useQuery(ALL_AUTHORS)
   
-  // 2. Объявляем мутацию изменения года рождения.
-  // refetchQueries принудительно заставляет Apollo Client перезапросить 
-  // актуальный список авторов с сервера сразу после отправки формы
+  // 2. Объявляем мутацию изменения года рождения
   const [changeBorn] = useMutation(EDIT_BORN, {
     refetchQueries: [{ query: ALL_AUTHORS }]
   })
 
-  // Задание 8.12: Хук синхронизации. Как только данные авторов загрузились с сервера, 
-  // автоматически выставляем имя первого автора в select по умолчанию, 
-  // чтобы поле не оставалось пустым
-  useEffect(() => {
-    if (data && data.allAuthors && data.allAuthors.length > 0) {
-      setName(data.allAuthors[0].name)
-    }
-  }, [data])
-
-  // Если вкладка не активна, компонент ничего не рендерит
   if (!show) return null
-  
   if (loading) return <div style={{ padding: '10px' }}>loading authors...</div>
-  if (error) return <div style={{ color: 'red', padding: '10px' }}>Error loading authors: {error.message}</div>
+  if (error) return <div style={{ color: 'red', padding: '10px' }}>Error: {error.message}</div>
 
   const submit = (event) => {
     event.preventDefault()
     
-    if (!name || !born) return
+    // ИСПРАВЛЕНО (React 19): Если пользователь не трогал select, 
+    // берем имя самого первого автора из массива данных сервера
+    const selectedName = name || (data?.allAuthors?.[0]?.name)
 
-    // Передаем переменные в GraphQL-мутацию
+    if (!selectedName || !born) return
+
     changeBorn({ 
       variables: { 
-        name, 
+        name: selectedName, 
         setBornTo: Number(born) 
       } 
     })
 
     setBorn('')
+    setName('') // Сбрасываем выбранное имя для следующего раза
   }
 
   return (
@@ -69,17 +60,17 @@ const Authors = ({ show }) => {
         </tbody>
       </table>
 
-      {/* Задания 8.11 и 8.12: Форма установки года рождения автора */}
-      <h3 style={{ marginTop: '20px' }}>Set birthyear</h3>
+      <h3>Set birthyear</h3>
       <form onSubmit={submit} style={{ maxWidth: '300px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <label style={{ width: '80px' }}>name</label>
-          {/* Задание 8.12: Вместо текстового инпута используем безопасный выпадающий список select */}
           <select 
             value={name} 
             onChange={({ target }) => setName(target.value)}
             style={{ flex: 1, padding: '5px' }}
           >
+            {/* ИСПРАВЛЕНО: Добавляем пустую подсказку-опцию по умолчанию */}
+            <option value="">-- select author --</option>
             {data.allAuthors.map((a) => (
               <option key={a.id} value={a.name}>
                 {a.name}
@@ -87,7 +78,7 @@ const Authors = ({ show }) => {
             ))}
           </select>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <label style={{ width: '80px' }}>born</label>
           <input
             type="number"
