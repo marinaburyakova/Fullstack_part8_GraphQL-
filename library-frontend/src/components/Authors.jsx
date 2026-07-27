@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation } from '@apollo/client'
+import { useQuery, useMutation } from '@apollo/client/react/index.js'
 import { ALL_AUTHORS, EDIT_BORN } from '../queries'
 
 const Authors = ({ show }) => {

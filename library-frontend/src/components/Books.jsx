@@ -1,4 +1,4 @@
-import { useQuery } from '@apollo/client'
+import { useQuery } from '@apollo/client/react/index.js'
 import { ALL_BOOKS } from '../queries'
 
 const Books = ({ show }) => {
