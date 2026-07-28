@@ -1,14 +1,20 @@
 name: E2E tests (library)
 
 on:
-  # push:
-  #   branches: [ main, master ]
+  push:
+    branches: [ main, master ] # Раскомментируем для автоматической проверки при пуше
   workflow_dispatch:
 
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
 
     steps:
       - uses: actions/checkout@v6
@@ -34,9 +40,32 @@ jobs:
         working-directory: tests-chapter5
         run: npx playwright install chromium --with-deps
 
+      # Наполняем базу данных пользователем marina перед стартом браузера
+      - name: Seed database with test user
+        working-directory: library-backend
+        run: node seed.js
+        env:
+          MONGODB_URI: mongodb://localhost:27017/graphqlLibrary
+
+      # Запускаем GraphQL-бэкенд в фоновом режиме (на порту 4000)
+      - name: Start library-backend in background
+        working-directory: library-backend
+        run: npm start &
+        env:
+          MONGODB_URI: mongodb://localhost:27017/graphqlLibrary
+          JWT_SECRET: MARINA_SUPER_SECRET_KEY_123
+
+      # Запускаем React-фронтенд в фоновом режиме (на порту 5173)
+      - name: Start library-frontend in background
+        working-directory: library-frontend
+        run: npm run dev &
+
+      # Ждем 5 секунд, чтобы серверы успели инициализировать порты, и бьем тестами
       - name: Run E2E tests
-        working-directory: tests-chapter5
-        run: npx playwright test
+        run: |
+          sleep 5
+          cd tests-chapter5
+          npx playwright test
 
       - name: Upload test report
         uses: actions/upload-artifact@v4
