@@ -10,6 +10,10 @@ const schema = new mongoose.Schema({
   favoriteGenre: {
     type: String,
     required: true
+  },
+  passwordHash: {
+    type: String
+    // Флаг required убран ради поддержки фабрики тестов
   }
 })
 

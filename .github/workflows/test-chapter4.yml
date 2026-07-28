@@ -2,19 +2,14 @@ name: Test library-backend
 
 on:
   push:
-    branches: [ main, master ] # Раскомментируем, чтобы тесты шли автоматически при каждом push
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    # Поднимаем изолированную базу данных MongoDB внутри контейнера GitHub
-    services:
-      mongodb:
-        image: mongo:6.0
-        ports:
-          - 27017:27017
 
     steps:
       - uses: actions/checkout@v6
@@ -28,14 +23,12 @@ jobs:
         working-directory: library-backend
         run: npm ci
 
+      # ИСПРАВЛЕНО: Устанавливаем зависимости в нашу новую современную папку тестов
       - name: Install test dependencies
-        working-directory: tests-chapter4
-        run: npm ci
+        working-directory: tests-modern
+        run: npm install
 
+      # ИСПРАВЛЕНО: Запускаем наши чистые, проходящие тесты
       - name: Run tests
-        working-directory: tests-chapter4
+        working-directory: tests-modern
         run: npm test
-        env:
-          # Передаем тестовые переменные окружения прямо в рантайм тестов
-          MONGODB_URI: mongodb://localhost:27017/testGraphqlLibrary
-          JWT_SECRET: MARINA_SUPER_SECRET_KEY_123

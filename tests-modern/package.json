@@ -1,0 +1,14 @@
+{
+  "name": "modern-library-tests",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@apollo/server": "^5.5.1",
+    "graphql": "^16.14.2",
+    "mongodb-memory-server": "^10.4.0",
+    "mongoose": "^8.5.1"
+  }
+}

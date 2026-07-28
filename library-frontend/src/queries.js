@@ -63,8 +63,8 @@ export const EDIT_BORN = gql`
 
 // Задание 8.18: Мутация логина
 export const LOGIN = gql`
-  mutation login($username: String!) {
-    login(username: $username) {
+  mutation login($username: String!, $password: String!) {
+    login(username: $username, password: $password) {
       value
     }
   }

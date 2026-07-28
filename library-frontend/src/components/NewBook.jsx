@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@apollo/client/react/index.js'
-import { CREATE_BOOK, ALL_BOOKS, ALL_AUTHORS } from '../queries'
+import { CREATE_BOOK } from '../queries'
 
 const NewBook = ({ show, updateCacheWith }) => {
   const [title, setTitle] = useState('')
@@ -9,15 +9,18 @@ const NewBook = ({ show, updateCacheWith }) => {
   const [genre, setGenre] = useState('')
   const [genres, setGenres] = useState([])
 
-// ИСПРАВЛЕНО (Задание 8.26): Вместо refetchQueries используем ручное обновление через update
+  // Задание 8.26: Ручное обновление кэша вместо refetchQueries
   const [createBook] = useMutation(CREATE_BOOK, {
     update: (cache, response) => {
-      updateCacheWith(response.data.addBook)
+      if (response.data && response.data.addBook) {
+        updateCacheWith(response.data.addBook)
+      }
     },
     onError: (error) => {
-      alert(error.graphQLErrors?.[0]?.message || 'Error saving book')
+      alert(error.graphQLErrors?.[0]?.message || error.message || 'Error saving book')
     }
   })
+
   if (!show) return null
 
   const submit = async (event) => {
@@ -25,17 +28,15 @@ const NewBook = ({ show, updateCacheWith }) => {
 
     if (!title || !author || !published) return
 
-    // Передаем переменные в GraphQL-мутацию
-    createBook({
-      variables: {
-        title,
-        author,
-        published: Number(published),
-        genres,
-      },
+    createBook({ 
+      variables: { 
+        title, 
+        author, 
+        published: Number(published), 
+        genres 
+      } 
     })
 
-    // Полностью очищаем все поля формы
     setTitle('')
     setPublished('')
     setAuthor('')
@@ -44,83 +45,72 @@ const NewBook = ({ show, updateCacheWith }) => {
   }
 
   const addGenre = () => {
-    if (genre.trim() !== '') {
+    if (genre.trim()) {
       setGenres(genres.concat(genre.trim()))
       setGenre('')
     }
   }
 
   return (
-    <div>
-      <form
-        onSubmit={submit}
-        style={{
-          maxWidth: '300px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-        }}
-      >
+    <div style={{ maxWidth: '400px' }}>
+      <h2>add book</h2>
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        
+        {/* КРИТИЧЕСКИ ВАЖНО ДЛЯ PLAYWRIGHT (Строка 107): Связка label + id строго строчными буквами */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <label style={{ width: '80px' }}>title</label>
+          <label htmlFor="title" style={{ width: '100px' }}>title</label>
           <input
+            id="title"
+            name="title"
             value={title}
             onChange={({ target }) => setTitle(target.value)}
             style={{ flex: 1, padding: '5px' }}
           />
         </div>
+
+        {/* КРИТИЧЕСКИ ВАЖНО ДЛЯ PLAYWRIGHT (Строка 108) */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <label style={{ width: '80px' }}>author</label>
+          <label htmlFor="author" style={{ width: '100px' }}>author</label>
           <input
+            id="author"
+            name="author"
             value={author}
             onChange={({ target }) => setAuthor(target.value)}
             style={{ flex: 1, padding: '5px' }}
           />
         </div>
+
+        {/* КРИТИЧЕСКИ ВАЖНО ДЛЯ PLAYWRIGHT (Строка 109) */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <label style={{ width: '80px' }}>published</label>
+          <label htmlFor="published" style={{ width: '100px' }}>published</label>
           <input
+            id="published"
+            name="published"
             type="number"
             value={published}
             onChange={({ target }) => setPublished(target.value)}
             style={{ flex: 1, padding: '5px' }}
           />
         </div>
-        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+
+        {/* КРИТИЧЕСКИ ВАЖНО ДЛЯ PLAYWRIGHT (Метод createBook в хелпере) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label htmlFor="genre" style={{ width: '92px' }}>genre</label>
           <input
+            id="genre"
+            name="genre"
             value={genre}
             onChange={({ target }) => setGenre(target.value)}
             style={{ flex: 1, padding: '5px' }}
           />
-          <button
-            onClick={addGenre}
-            type="button"
-            style={{ padding: '5px' }}
-          >
-            add genre
-          </button>
+          <button onClick={addGenre} type="button">add genre</button>
         </div>
-        <div
-          style={{
-            textTransform: 'lowercase',
-            color: '#666',
-            fontSize: '14px',
-          }}
-        >
+
+        <div style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
           genres: {genres.join(', ')}
         </div>
-        <button
-          type="submit"
-          style={{
-            padding: '8px',
-            background: '#28a745',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-          }}
-        >
+
+        <button type="submit" style={{ marginTop: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', padding: '10px', borderRadius: '4px', cursor: 'pointer' }}>
           create book
         </button>
       </form>
