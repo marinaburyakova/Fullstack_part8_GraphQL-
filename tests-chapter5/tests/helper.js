@@ -1,4 +1,4 @@
-const GRAPHQL_URL = 'http://localhost:4000'
+const GRAPHQL_URL = 'http://localhost:4000/graphql'
 
 const TEST_USER = { username: 'testuser', favoriteGenre: 'refactoring' }
 const TEST_PASSWORD = 'secret'

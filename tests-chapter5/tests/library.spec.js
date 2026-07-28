@@ -9,9 +9,17 @@ describe('Library app', () => {
 
   test('front page shows authors by default', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'authors' })).toBeVisible()
-    await expect(page.getByText('Robert Martin')).toBeVisible()
-    await expect(page.getByText('Martin Fowler')).toBeVisible()
-    await expect(page.getByText('Fyodor Dostoevsky')).toBeVisible()
+
+    // ИСПРАВЛЕНО: Ищем имя строго в ячейках таблицы, игнорируя select
+    await expect(
+      page.getByRole('cell', { name: 'Robert Martin', exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('cell', { name: 'Martin Fowler', exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('cell', { name: 'Fyodor Dostoevsky', exact: true }),
+    ).toBeVisible()
   })
 
   test('books page shows all books', async ({ page }) => {
