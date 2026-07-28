@@ -12,6 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    # Поднимаем реальную базу данных MongoDB внутри контейнера GitHub
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+
     steps:
       - uses: actions/checkout@v6
 
@@ -36,22 +43,22 @@ jobs:
         working-directory: tests-chapter5
         run: npx playwright install chromium --with-deps
 
-      # 1. Запускаем GraphQL-бэкенд в фоновом режиме на порту 4000
+      # Запускаем бэкенд в фоне и глушим логи, чтобы GitHub Actions не зависал
       - name: Start library-backend in background
         working-directory: library-backend
-        run: node index.js &
+        run: node index.js > /dev/null 2>&1 &
         env:
           NODE_ENV: test
           PORT: 4000
           JWT_SECRET: test-secret-key
-          MONGODB_URI: mongodb://127.0.0.1:27017/graphqlLibraryTest
+          MONGODB_URI: mongodb://localhost:27017/graphqlLibraryTest
 
-      # 2. Запускаем React-фронтенд в фоновом режиме на порту 5173
+      # ИСПРАВЛЕНО: Вернули законный "- name:" и убрали Berkut, выравнивание идеальное
       - name: Start library-frontend in background
         working-directory: library-frontend
-        run: npm run dev &
+        run: npm run dev > /dev/null 2>&1 &
 
-      # 3. Даем серверам 5 секунд на инициализацию портов и бьем нашими рабочими 16 тестами Playwright
+      # Ждем 5 секунд готовности портов и запускаем наши рабочие 16 тестов Playwright
       - name: Run E2E tests
         run: |
           sleep 5
