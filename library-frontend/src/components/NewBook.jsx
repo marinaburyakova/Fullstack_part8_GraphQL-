@@ -2,19 +2,22 @@ import { useState } from 'react'
 import { useMutation } from '@apollo/client/react/index.js'
 import { CREATE_BOOK, ALL_BOOKS, ALL_AUTHORS } from '../queries'
 
-const NewBook = ({ show }) => {
+const NewBook = ({ show, updateCacheWith }) => {
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [published, setPublished] = useState('')
   const [genre, setGenre] = useState('')
   const [genres, setGenres] = useState([])
 
-  // Объявляем мутацию создания книги (Задание 8.10)
-  // Принудительно заставляем Apollo перечитать списки книг и авторов с сервера
+// ИСПРАВЛЕНО (Задание 8.26): Вместо refetchQueries используем ручное обновление через update
   const [createBook] = useMutation(CREATE_BOOK, {
-    refetchQueries: [{ query: ALL_BOOKS }, { query: ALL_AUTHORS }],
+    update: (cache, response) => {
+      updateCacheWith(response.data.addBook)
+    },
+    onError: (error) => {
+      alert(error.graphQLErrors?.[0]?.message || 'Error saving book')
+    }
   })
-
   if (!show) return null
 
   const submit = async (event) => {

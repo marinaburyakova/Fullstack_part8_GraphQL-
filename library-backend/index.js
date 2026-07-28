@@ -1,20 +1,29 @@
+
 import { ApolloServer } from '@apollo/server'
-import { startStandaloneServer } from '@apollo/server/standalone'
-import { GraphQLError } from 'graphql'
+import { expressMiddleware } from '@apollo/server/express4'  
+import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer'
+import { makeExecutableSchema } from '@graphql-tools/schema'
+import { useServer } from 'graphql-ws/use/ws'
+import { WebSocketServer } from 'ws'
+import express from 'express'
+import http from 'http'
+import cors from 'cors'
+import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import jwt from 'jsonwebtoken'
 
 import Author from './models/author.js'
 import Book from './models/book.js'
-import User from './models/user.js' // Импорт модели юзера
+import User from './models/user.js'
+import { GraphQLError } from 'graphql'
 
 dotenv.config()
 const JWT_SECRET = process.env.JWT_SECRET
 
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('connected to MongoDB (˶ᵔ ᵕ ᵔ˶)'))
-  .catch((error) => console.log('error connection:', error.message))
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB for Subscriptions (˶ᵔ ᵕ ᵔ˶)'))
+  .catch((error) => console.log('Error:', error.message))
 
 const typeDefs = `#graphql
   type Author {
@@ -32,14 +41,12 @@ const typeDefs = `#graphql
     genres: [String!]!
   }
 
-  # НОВОЕ: Тип пользователя (Задание 8.19)
   type User {
     username: String!
     favoriteGenre: String!
     id: ID!
   }
 
-  # НОВОЕ: Тип токена для авторизации
   type Token {
     value: String!
   }
@@ -49,7 +56,7 @@ const typeDefs = `#graphql
     authorCount: Int!
     allBooks(author: String, genre: String): [Book!]!
     allAuthors: [Author!]!
-    me: User # НОВОЕ: Запрос профиля текущего юзера (Задание 8.19)
+    me: User
   }
 
   type Mutation {
@@ -59,24 +66,24 @@ const typeDefs = `#graphql
       published: Int!
       genres: [String!]!
     ): Book!
+    editAuthor(name: String!, setBornTo: Int!): Author
+    login(username: String!): Token
+  }
 
-    editAuthor(
-      name: String!
-      setBornTo: Int!
-    ): Author
-
-    # НОВОЕ: Мутация входа (Задание 8.18)
-    login(
-      username: String!
-    ): Token
+  # НОВОЕ (Задание 8.23): Точка входа для прослушивания событий в реальном времени
+  type Subscription {
+    bookAdded: Book!
   }
 `
+
+// Создаем специальный итератор для публикации событий
+import { PubSub } from 'graphql-subscriptions'
+const pubsub = new PubSub()
 
 const resolvers = {
   Query: {
     bookCount: async () => Book.collection.countDocuments(),
     authorCount: async () => Author.collection.countDocuments(),
-    
     allBooks: async (root, args) => {
       let query = {}
       if (args.genre) query.genres = args.genre
@@ -87,36 +94,30 @@ const resolvers = {
       }
       return Book.find(query).populate('author')
     },
-    
     allAuthors: async () => Author.find({}),
-    
-    // Резолвер профиля возвращает юзера из контекста (Задание 8.19)
-    me: (root, args, context) => context.currentUser
+    me: (root, args, context) => context.currentUser,
   },
-
   Author: {
-    bookCount: async (root) => Book.find({ author: root._id }).countDocuments()
+    bookCount: async (root) => Book.find({ author: root._id }).countDocuments(),
   },
-
   Mutation: {
     addBook: async (root, args, context) => {
       const currentUser = context.currentUser
-
-      // Задание 8.20: Защита роута. Если юзер не залогинен, выкидываем ошибку
       if (!currentUser) {
         throw new GraphQLError('not authenticated', {
-          extensions: { code: 'BAD_USER_INPUT' }
+          extensions: { code: 'BAD_USER_INPUT' },
         })
       }
 
       let author = await Author.findOne({ name: args.author })
-
       if (!author) {
         author = new Author({ name: args.author })
         try {
           await author.save()
         } catch (error) {
-          throw new GraphQLError('Saving author failed: ' + error.message, { extensions: { code: 'BAD_USER_INPUT' } })
+          throw new GraphQLError('Author failed: ' + error.message, {
+            extensions: { code: 'BAD_USER_INPUT' },
+          })
         }
       }
 
@@ -124,67 +125,98 @@ const resolvers = {
       try {
         await book.save()
       } catch (error) {
-        throw new GraphQLError('Saving book failed: ' + error.message, { extensions: { code: 'BAD_USER_INPUT' } })
-      }
-
-      return book.populate('author')
-    },
-
-    editAuthor: async (root, args, context) => {
-      // Задание 8.20: Защита изменения года рождения
-      if (!context.currentUser) {
-        throw new GraphQLError('not authenticated', { extensions: { code: 'BAD_USER_INPUT' } })
-      }
-
-      const author = await Author.findOne({ name: args.name })
-      if (!author) return null
-
-      author.born = args.setBornTo
-      try {
-        return await author.save()
-      } catch (error) {
-        throw new GraphQLError('Updating author failed: ' + error.message, { extensions: { code: 'BAD_USER_INPUT' } })
-      }
-    },
-
-    // Мутация авторизации (Задание 8.18)
-    login: async (root, args) => {
-      const user = await User.findOne({ username: args.username })
-
-      // В рамках упрощения задания курса пароль не проверяется, только username
-      if (!user || args.username !== 'marina') {
-        throw new GraphQLError('wrong credentials', {
-          extensions: { code: 'BAD_USER_INPUT' }
+        throw new GraphQLError('Book failed: ' + error.message, {
+          extensions: { code: 'BAD_USER_INPUT' },
         })
       }
 
-      const userForToken = {
-        username: user.username,
-        id: user._id,
-      }
+      const populatedBook = await book.populate('author')
 
-      // Генерируем JWT токен
-      return { value: jwt.sign(userForToken, JWT_SECRET) }
-    }
-  }
+      // НОВОЕ (Задание 8.24): Публикуем событие "КНИГА_ДОБАВЛЕНА" в WebSocket-канал
+      pubsub.publish('BOOK_ADDED', { bookAdded: populatedBook })
+
+      return populatedBook
+    },
+    editAuthor: async (root, args, context) => {
+      if (!context.currentUser) {
+        throw new GraphQLError('not authenticated', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        })
+      }
+      const author = await Author.findOne({ name: args.name })
+      if (!author) return null
+      author.born = args.setBornTo
+      return author.save()
+    },
+    login: async (root, args) => {
+      const user = await User.findOne({ username: args.username })
+      if (!user || args.username !== 'marina') {
+        throw new GraphQLError('wrong credentials', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        })
+      }
+      return {
+        value: jwt.sign({ username: user.username, id: user._id }, JWT_SECRET),
+      }
+    },
+  },
+
+  // НОВОЕ (Задание 8.23): Резолвер подписки, связывающий триггер и WebSocket
+  Subscription: {
+    bookAdded: {
+      subscribe: () => pubsub.asyncIterator('BOOK_ADDED'),
+    },
+  },
 }
 
+// Запуск сложной структуры Express + HTTP Server + WebSockets
+const app = express()
+const httpServer = http.createServer(app)
+
+const schema = makeExecutableSchema({ typeDefs, resolvers })
+
+const wsServer = new WebSocketServer({
+  server: httpServer,
+  path: '/graphql',
+})
+
+const serverCleanup = useServer({ schema }, wsServer)
+
 const server = new ApolloServer({
-  typeDefs,
-  resolvers,
+  schema,
+  plugins: [
+    ApolloServerPluginDrainHttpServer({ httpServer }),
+    {
+      async serverWillStart() {
+        return {
+          async drainServer() {
+            await serverCleanup.dispose()
+          },
+        }
+      },
+    },
+  ],
 })
 
-// НастраиваемStandalone Server с перехватом токенов в контекст
-const { url } = await startStandaloneServer(server, {
-  listen: { port: 4000 },
-  context: async ({ req }) => {
-    const auth = req ? req.headers.authorization : null
-    if (auth && auth.startsWith('Bearer ')) {
-      const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET)
-      const currentUser = await User.findById(decodedToken.id)
-      return { currentUser }
-    }
-  },
-})
+await server.start()
 
-console.log(`🚀 GraphQL Server with Auth ready at ${url}`)
+app.use(
+  '/graphql',
+  cors(),
+  express.json(),
+  expressMiddleware(server, {
+    context: async ({ req }) => {
+      const auth = req ? req.headers.authorization : null
+      if (auth && auth.startsWith('Bearer ')) {
+        const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET)
+        const currentUser = await User.findById(decodedToken.id)
+        return { currentUser }
+      }
+    },
+  }),
+)
+
+const PORT = 4000
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server ready at http://localhost:${PORT}/graphql`)
+})

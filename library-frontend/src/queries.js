@@ -1,6 +1,6 @@
 import { gql } from '@apollo/client'
 
-// Задание 8.8: Запрос на получение списка всех авторов
+// Задание 8.8: Получение списка всех авторов
 export const ALL_AUTHORS = gql`
   query {
     allAuthors {
@@ -12,19 +12,22 @@ export const ALL_AUTHORS = gql`
   }
 `
 
-// Задание 8.9: Запрос на получение списка всех книг
+// Задание 8.9 и 8.22: ИСПРАВЛЕНО: запрашиваем вложенное поле name объекта author
 export const ALL_BOOKS = gql`
   query {
     allBooks {
       title
-      author
+      author {
+        name
+      }
       published
       id
+      genres
     }
   }
 `
 
-// Задание 8.10: Мутация добавления новой книги с использованием GraphQL-переменных ($)
+// Задание 8.10: Мутация добавления книги
 export const CREATE_BOOK = gql`
   mutation createBook($title: String!, $author: String!, $published: Int!, $genres: [String!]!) {
     addBook(
@@ -34,10 +37,12 @@ export const CREATE_BOOK = gql`
       genres: $genres
     ) {
       title
-      author
+      author {
+        name
+      }
       published
-      genres
       id
+      genres
     }
   }
 `
@@ -55,6 +60,7 @@ export const EDIT_BORN = gql`
     }
   }
 `
+
 // Задание 8.18: Мутация логина
 export const LOGIN = gql`
   mutation login($username: String!) {
@@ -74,7 +80,7 @@ export const USER_ME = gql`
   }
 `
 
-// Задание 8.21: Запрос книг с фильтрацией по жанру (для рекомендаций и фильтров)
+// Задание 8.21: Запрос книг с фильтрацией по жанру
 export const ALL_BOOKS_BY_GENRE = gql`
   query allBooks($genre: String) {
     allBooks(genre: $genre) {
@@ -83,6 +89,21 @@ export const ALL_BOOKS_BY_GENRE = gql`
         name
       }
       published
+      id
+      genres
+    }
+  }
+`
+
+// Задание 8.23: Подписка на добавление книг в реальном времени
+export const BOOK_ADDED = gql`
+  subscription {
+    bookAdded {
+      title
+      published
+      author {
+        name
+      }
       id
       genres
     }
