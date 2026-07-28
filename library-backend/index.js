@@ -1,53 +1,58 @@
 import { ApolloServer } from '@apollo/server'
 import { startStandaloneServer } from '@apollo/server/standalone'
+import { GraphQLError } from 'graphql'
+import mongoose from 'mongoose'
+import dotenv from 'dotenv'
+import jwt from 'jsonwebtoken'
 
-// Исходный массив авторов (Задание 8.1)
-let authors = [
-  { name: 'Robert Martin', id: "fda1b5d0-31e4-11e9-a297-d4f547e7b13c", born: 1952 },
-  { name: 'Martin Fowler', id: "fda1b5d1-31e4-11e9-a297-d4f547e7b13c", born: 1963 },
-  { name: 'Fyodor Dostoevsky', id: "fda1b5d2-31e4-11e9-a297-d4f547e7b13c", born: 1821 },
-  { name: 'Joshua Bloch', id: "fda1b5d3-31e4-11e9-a297-d4f547e7b13c", born: 1961 },
-  { name: 'Sandi Metz', id: "fda1b5d4-31e4-11e9-a297-d4f547e7b13c", born: 1956 }
-]
+import Author from './models/author.js'
+import Book from './models/book.js'
+import User from './models/user.js' // Импорт модели юзера
 
-// Исходный массив книг (Задание 8.1)
-let books = [
-  { title: 'Clean Code', published: 2008, author: 'Robert Martin', id: "ffa1b5d0-31e4-11e9-a297-d4f547e7b13c", genres: ['refactoring'] },
-  { title: 'Agile Software Development', published: 2002, author: 'Robert Martin', id: "ffa1b5d1-31e4-11e9-a297-d4f547e7b13c", genres: ['agile', 'patterns', 'design'] },
-  { title: 'Refactoring', published: 1999, author: 'Martin Fowler', id: "ffa1b5d2-31e4-11e9-a297-d4f547e7b13c", genres: ['refactoring'] },
-  { title: 'Patterns of Enterprise Application Architecture', published: 2003, author: 'Martin Fowler', id: "ffa1b5d3-31e4-11e9-a297-d4f547e7b13c", genres: ['patterns'] },
-  { title: 'Crime and Punishment', published: 1866, author: 'Fyodor Dostoevsky', id: "ffa1b5d4-31e4-11e9-a297-d4f547e7b13c", genres: ['classic', 'crime'] },
-  { title: 'The Demons', published: 1872, author: 'Fyodor Dostoevsky', id: "ffa1b5d5-31e4-11e9-a297-d4f547e7b13c", genres: ['classic', 'revolution'] }
-]
+dotenv.config()
+const JWT_SECRET = process.env.JWT_SECRET
 
-// 1. Описание Схемы данных GraphQL (typeDefs)
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('connected to MongoDB (˶ᵔ ᵕ ᵔ˶)'))
+  .catch((error) => console.log('error connection:', error.message))
+
 const typeDefs = `#graphql
   type Author {
     name: String!
     id: ID!
     born: Int
-    bookCount: Int! # Задание 8.3: Вычисляемое динамическое поле
+    bookCount: Int!
   }
 
   type Book {
     title: String!
     published: Int!
-    author: String!
+    author: Author!
     id: ID!
     genres: [String!]!
   }
 
-  # Описание всех доступных запросов на чтение (Queries)
-  type Query {
-    bookCount: Int!      # Задание 8.1
-    authorCount: Int!    # Задание 8.1
-    allBooks(author: String, genre: String): [Book!]! # Задание 8.2 (с фильтрами)
-    allAuthors: [Author!]! # Задание 8.3
+  # НОВОЕ: Тип пользователя (Задание 8.19)
+  type User {
+    username: String!
+    favoriteGenre: String!
+    id: ID!
   }
 
-  # Описание всех доступных запросов на изменение данных (Mutations)
+  # НОВОЕ: Тип токена для авторизации
+  type Token {
+    value: String!
+  }
+
+  type Query {
+    bookCount: Int!
+    authorCount: Int!
+    allBooks(author: String, genre: String): [Book!]!
+    allAuthors: [Author!]!
+    me: User # НОВОЕ: Запрос профиля текущего юзера (Задание 8.19)
+  }
+
   type Mutation {
-    # Задание 8.4, 8.5: Добавление новой книги
     addBook(
       title: String!
       author: String!
@@ -55,95 +60,131 @@ const typeDefs = `#graphql
       genres: [String!]!
     ): Book!
 
-    # Задание 8.6, 8.7: Редактирование года рождения автора
     editAuthor(
       name: String!
       setBornTo: Int!
     ): Author
+
+    # НОВОЕ: Мутация входа (Задание 8.18)
+    login(
+      username: String!
+    ): Token
   }
 `
 
-// 2. Логика обработки запросов (Resolvers)
 const resolvers = {
   Query: {
-    // Возвращает общее количество книг (Задание 8.1)
-    bookCount: () => books.length,
+    bookCount: async () => Book.collection.countDocuments(),
+    authorCount: async () => Author.collection.countDocuments(),
     
-    // Возвращает общее количество авторов (Задание 8.1)
-    authorCount: () => authors.length,
-    
-    // Возвращает книги с возможностью фильтрации по автору и/или жанру (Задание 8.2)
-    allBooks: (root, args) => {
-      let filteredBooks = books
-      
+    allBooks: async (root, args) => {
+      let query = {}
+      if (args.genre) query.genres = args.genre
       if (args.author) {
-        filteredBooks = filteredBooks.filter(b => b.author === args.author)
+        const author = await Author.findOne({ name: args.author })
+        if (author) query.author = author._id
+        else return []
       }
-      
-      if (args.genre) {
-        filteredBooks = filteredBooks.filter(b => b.genres.includes(args.genre))
-      }
-      
-      return filteredBooks
+      return Book.find(query).populate('author')
     },
-
-    // Возвращает массив всех авторов (Задание 8.3)
-    allAuthors: () => authors
+    
+    allAuthors: async () => Author.find({}),
+    
+    // Резолвер профиля возвращает юзера из контекста (Задание 8.19)
+    me: (root, args, context) => context.currentUser
   },
 
-  // Кастомный резолвер для подсчета количества книг конкретного автора (Задание 8.3)
   Author: {
-    bookCount: (root) => {
-      return books.filter(b => b.author === root.name).length
-    }
+    bookCount: async (root) => Book.find({ author: root._id }).countDocuments()
   },
 
   Mutation: {
-    // Добавление новой книги (Задание 8.4) + авто-создание автора, если его нет (Задание 8.5)
-    addBook: (root, args) => {
-      const authorExists = authors.find(a => a.name === args.author)
-      
-      if (!authorExists) {
-        // Если автора с таким именем нет в массиве, регистрируем его (Задание 8.5)
-        const newAuthor = { 
-          name: args.author, 
-          id: (100000 * Math.random()).toFixed(0) 
-        }
-        authors = authors.concat(newAuthor)
+    addBook: async (root, args, context) => {
+      const currentUser = context.currentUser
+
+      // Задание 8.20: Защита роута. Если юзер не залогинен, выкидываем ошибку
+      if (!currentUser) {
+        throw new GraphQLError('not authenticated', {
+          extensions: { code: 'BAD_USER_INPUT' }
+        })
       }
 
-      // Создаем и сохраняем саму книгу
-      const newBook = { 
-        ...args, 
-        id: (100000 * Math.random()).toFixed(0) 
+      let author = await Author.findOne({ name: args.author })
+
+      if (!author) {
+        author = new Author({ name: args.author })
+        try {
+          await author.save()
+        } catch (error) {
+          throw new GraphQLError('Saving author failed: ' + error.message, { extensions: { code: 'BAD_USER_INPUT' } })
+        }
       }
-      books = books.concat(newBook)
-      return newBook
+
+      const book = new Book({ ...args, author: author._id })
+      try {
+        await book.save()
+      } catch (error) {
+        throw new GraphQLError('Saving book failed: ' + error.message, { extensions: { code: 'BAD_USER_INPUT' } })
+      }
+
+      return book.populate('author')
     },
 
-    // Редактирование года рождения автора (Задание 8.6)
-    editAuthor: (root, args) => {
-      const author = authors.find(a => a.name === args.name)
-      
-      if (!author) {
-        return null // Задание 8.7: Если автор не найден, по спецификации возвращаем null
+    editAuthor: async (root, args, context) => {
+      // Задание 8.20: Защита изменения года рождения
+      if (!context.currentUser) {
+        throw new GraphQLError('not authenticated', { extensions: { code: 'BAD_USER_INPUT' } })
       }
 
-      const updatedAuthor = { ...author, born: args.setBornTo }
-      authors = authors.map(a => a.name === args.name ? updatedAuthor : a)
-      return updatedAuthor
+      const author = await Author.findOne({ name: args.name })
+      if (!author) return null
+
+      author.born = args.setBornTo
+      try {
+        return await author.save()
+      } catch (error) {
+        throw new GraphQLError('Updating author failed: ' + error.message, { extensions: { code: 'BAD_USER_INPUT' } })
+      }
+    },
+
+    // Мутация авторизации (Задание 8.18)
+    login: async (root, args) => {
+      const user = await User.findOne({ username: args.username })
+
+      // В рамках упрощения задания курса пароль не проверяется, только username
+      if (!user || args.username !== 'marina') {
+        throw new GraphQLError('wrong credentials', {
+          extensions: { code: 'BAD_USER_INPUT' }
+        })
+      }
+
+      const userForToken = {
+        username: user.username,
+        id: user._id,
+      }
+
+      // Генерируем JWT токен
+      return { value: jwt.sign(userForToken, JWT_SECRET) }
     }
   }
 }
 
-// 3. Конфигурация и запуск Apollo Server
 const server = new ApolloServer({
   typeDefs,
   resolvers,
 })
 
-// Запускаем сервер изолированно на стандартном порту 4000
+// НастраиваемStandalone Server с перехватом токенов в контекст
 const { url } = await startStandaloneServer(server, {
   listen: { port: 4000 },
+  context: async ({ req }) => {
+    const auth = req ? req.headers.authorization : null
+    if (auth && auth.startsWith('Bearer ')) {
+      const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET)
+      const currentUser = await User.findById(decodedToken.id)
+      return { currentUser }
+    }
+  },
 })
 
+console.log(`🚀 GraphQL Server with Auth ready at ${url}`)

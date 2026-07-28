@@ -55,3 +55,36 @@ export const EDIT_BORN = gql`
     }
   }
 `
+// Задание 8.18: Мутация логина
+export const LOGIN = gql`
+  mutation login($username: String!) {
+    login(username: $username) {
+      value
+    }
+  }
+`
+
+// Задание 8.19: Запрос профиля пользователя
+export const USER_ME = gql`
+  query {
+    me {
+      username
+      favoriteGenre
+    }
+  }
+`
+
+// Задание 8.21: Запрос книг с фильтрацией по жанру (для рекомендаций и фильтров)
+export const ALL_BOOKS_BY_GENRE = gql`
+  query allBooks($genre: String) {
+    allBooks(genre: $genre) {
+      title
+      author {
+        name
+      }
+      published
+      id
+      genres
+    }
+  }
+`

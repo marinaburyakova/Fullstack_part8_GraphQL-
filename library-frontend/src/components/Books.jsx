@@ -28,7 +28,7 @@ const Books = ({ show }) => {
           {data.allBooks.map((b) => (
             <tr key={b.id} style={{ borderBottom: '1px solid #eee' }}>
               <td style={{ padding: '8px' }}>{b.title}</td>
-              <td style={{ padding: '8px' }}>{b.author}</td>
+              <td style={{ padding: '8px' }}>{b.author.name || b.author}</td>
               <td style={{ padding: '8px' }}>{b.published}</td>
             </tr>
           ))}

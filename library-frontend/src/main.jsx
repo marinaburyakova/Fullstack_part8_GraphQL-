@@ -3,18 +3,28 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-// Импортируем строго разделенные модули ядра и провайдера
-import { ApolloClient, InMemoryCache, HttpLink } from '@apollo/client'
+import { ApolloClient, InMemoryCache, HttpLink, from } from '@apollo/client'
 import { ApolloProvider } from '@apollo/client/react/index.js'
+import { setContext } from '@apollo/client/link/context/index.js' // Импорт контекста
 
-// Явно создаем сетевое соединение с сервером бэкенда на порту 4000
-const link = new HttpLink({
+const httpLink = new HttpLink({
   uri: 'http://localhost:4000',
 })
 
-// Инициализируем клиент, передавая созданный линк напрямую
+// Настраиваем middleware для автоматической подстановки токена (Задание 8.20)
+const authLink = setContext((_, { headers }) => {
+  const token = localStorage.getItem('library-user-token')
+  return {
+    headers: {
+      ...headers,
+      authorization: token ? `Bearer ${token}` : null,
+    }
+  }
+})
+
 const client = new ApolloClient({
-  link: link,
+  // Склеиваем ссылку авторизации и HTTP-ссылку вместе
+  link: from([authLink, httpLink]),
   cache: new InMemoryCache(),
 })
 
